@@ -1,0 +1,17 @@
+all: exec
+
+exec: lab4_start.o lab4_main.o lab4_util.o
+	ld -melf_i386 lab4_start.o lab4_main.o lab4_util.o -o lab4_main
+
+lab4_start.o:
+	nasm -f elf lab4_start.s -o lab4_start.o
+
+lab4_main.o:
+	gcc -m32 -Wall -ansi -c -nostdlib -fno-stack-protector task2b.c -o lab4_main.o
+
+lab4_util.o:
+	gcc -m32 -Wall -ansi -c -nostdlib -fno-stack-protector lab4_util.c -o lab4_util.o
+
+.PHONY: clean
+clean:
+	rm -rf ./*.o lab4_main lab4_util.o lab4_main.o lab4_start.o

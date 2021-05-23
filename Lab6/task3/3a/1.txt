@@ -1,0 +1,10 @@
+1.txt
+input.txt
+LineParser.c
+LineParser.h
+looper
+looper.c
+makefile
+mypipe.c
+myshell
+myshell.c
