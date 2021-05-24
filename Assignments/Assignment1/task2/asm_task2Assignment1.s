@@ -12,7 +12,7 @@ convertor:
 	push ebp
 	mov ebp, esp	
 	pushad			
-	mov ecx, dword [ebp+8]	; get function argument (pointer to string)
+	mov ecx, dword [ebp+16]	; get function argument (pointer to string)
 	mov edx, an
 	startlabel:				; label to start
 	cmp byte [ecx],10		; if ecx='\n'

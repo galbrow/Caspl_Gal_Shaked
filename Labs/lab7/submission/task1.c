@@ -14,6 +14,11 @@ typedef struct
     int unit_size;
     unsigned char mem_buf[BUF_SZ];
     size_t mem_count;
+    /*
+   .
+   .
+   Any additional fields you deem necessary
+  */
 } state;
 
 struct fun_desc
@@ -145,9 +150,7 @@ void loadIntoMemory(state *state)
     }
     fread(state->mem_buf, state->unit_size, length, fp);
     fclose(fp);
-    if (state->debug_mode == '1')
-        printf("file name:%s\nlocation: %x\nlength:%d\n", state->file_name, locationHex, length);
-    printf("Loaded %d units into memory\n", length);
+    printf("Loaded %d units into memory", length);
 }
 
 void memoryDisplay(state *state)
@@ -176,16 +179,13 @@ void memoryDisplay(state *state)
         fprintf(stderr, "invalid input");
         return;
     }
-    if (locationHex == 0)
-        print_units(stdout, state->mem_buf, length, state->unit_size);
-    else
-        print_units(stdout, (char *)locationHex, length, state->unit_size);
+    print_units(stdout, state->mem_buf + locationHex, length, state->unit_size);
 }
 
 void saveIntoFile(state *state)
 {
     char arr[NAME_LEN];
-    printf("Please enter <source-address> <target-location> <length>\n");
+    printf("Please enter <source-address> <target-location> <length>");
     fgets(arr, NAME_LEN, stdin);
     int target, sourceAddr, len;
     int parse = sscanf(arr, "%x %x %d\n", &sourceAddr, &target, &len);
@@ -194,63 +194,27 @@ void saveIntoFile(state *state)
         fprintf(stderr, "invalid input");
         return;
     }
-    FILE *fp = fopen(state->file_name, "r+b");
+    FILE *fp = fopen(state->file_name, "wb");
     if (fp == NULL)
     {
         fprintf(stderr, "failed to open file : %s", state->file_name);
         return;
     }
-    fseek(fp, 0L, SEEK_END);
+    fseek(fp, 0, SEEK_END);
     int res = ftell(fp);
     if (res < target)
-    {
-        printf("fileName:%s\nres: %d \ntarget: %x\n", state->file_name, res, target);
         fprintf(stderr, "file is shorter than target");
-    }
     else
     {
-        printf("%p", &state->mem_buf);
         fseek(fp, target, SEEK_SET);
-        if (sourceAddr == 0)
-            fwrite(state->mem_buf, state->unit_size, len, fp);
-        else
-            fwrite(&sourceAddr, state->unit_size, len, fp);
-        if (state->debug_mode == '1')
-            printf("file name:%s\nlocation: %x\nlength:%d\n", state->file_name, sourceAddr, len);
+        fwrite(state->mem_buf + sourceAddr, state->unit_size, len, fp);
     }
     fclose(fp);
 }
 
 void memoryModify(state *state)
 {
-    char arr[NAME_LEN];
-    printf("Please enter <location> <val>");
-    fgets(arr, NAME_LEN, stdin);
-    int location, val;
-    int parse = sscanf(arr, "%x %x\n", &location, &val);
-    if (parse == 0)
-    {
-        fprintf(stderr, "invalid input");
-        return;
-    }
-    FILE *fp = fopen(state->file_name, "r+");
-    if (fp == NULL)
-    {
-        fprintf(stderr, "failed to open file : %s", state->file_name);
-        return;
-    }
-    fseek(fp, 0L, SEEK_END);
-    int res = ftell(fp);
-    if (res < location)
-        fprintf(stderr, "file is shorter than target");
-    else
-    {
-        fseek(fp, location, SEEK_SET);
-        fwrite(&val, state->unit_size, 1, fp);
-        if (state->debug_mode == '1')
-            printf("location: %x\nval:%x\n", location, val);
-    }
-    fclose(fp);
+    printf("not implemented yet");
 }
 
 void printDebug(state *state)
