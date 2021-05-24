@@ -14,11 +14,6 @@ typedef struct
     int unit_size;
     unsigned char mem_buf[BUF_SZ];
     size_t mem_count;
-    /*
-   .
-   .
-   Any additional fields you deem necessary
-  */
 } state;
 
 struct fun_desc
@@ -150,7 +145,9 @@ void loadIntoMemory(state *state)
     }
     fread(state->mem_buf, state->unit_size, length, fp);
     fclose(fp);
-    printf("Loaded %d units into memory", length);
+    if (state->debug_mode == '1')
+        printf("file name:%s\nlocation: %x\nlength:%d\n", state->file_name, locationHex, length);
+    printf("Loaded %d units into memory\n", length);
 }
 
 void memoryDisplay(state *state)
@@ -182,13 +179,13 @@ void memoryDisplay(state *state)
     if (locationHex == 0)
         print_units(stdout, state->mem_buf, length, state->unit_size);
     else
-        print_units(stdout, locationHex, length, state->unit_size);
+        print_units(stdout, (char *)locationHex, length, state->unit_size);
 }
 
 void saveIntoFile(state *state)
 {
     char arr[NAME_LEN];
-    printf("Please enter <source-address> <target-location> <length>");
+    printf("Please enter <source-address> <target-location> <length>\n");
     fgets(arr, NAME_LEN, stdin);
     int target, sourceAddr, len;
     int parse = sscanf(arr, "%x %x %d\n", &sourceAddr, &target, &len);
@@ -197,16 +194,19 @@ void saveIntoFile(state *state)
         fprintf(stderr, "invalid input");
         return;
     }
-    FILE *fp = fopen(state->file_name, "wb");
+    FILE *fp = fopen(state->file_name, "r+b");
     if (fp == NULL)
     {
         fprintf(stderr, "failed to open file : %s", state->file_name);
         return;
     }
-    fseek(fp, 0, SEEK_END);
+    fseek(fp, 0L, SEEK_END);
     int res = ftell(fp);
     if (res < target)
+    {
+        printf("fileName:%s\nres: %d \ntarget: %x\n", state->file_name, res, target);
         fprintf(stderr, "file is shorter than target");
+    }
     else
     {
         printf("%p", &state->mem_buf);
@@ -214,7 +214,9 @@ void saveIntoFile(state *state)
         if (sourceAddr == 0)
             fwrite(state->mem_buf, state->unit_size, len, fp);
         else
-            fwrite(sourceAddr, state->unit_size, len, fp);
+            fwrite(&sourceAddr, state->unit_size, len, fp);
+        if (state->debug_mode == '1')
+            printf("file name:%s\nlocation: %x\nlength:%d\n", state->file_name, sourceAddr, len);
     }
     fclose(fp);
 }
@@ -245,6 +247,8 @@ void memoryModify(state *state)
     {
         fseek(fp, location, SEEK_SET);
         fwrite(&val, state->unit_size, 1, fp);
+        if (state->debug_mode == '1')
+            printf("location: %x\nval:%x\n");
     }
     fclose(fp);
 }
