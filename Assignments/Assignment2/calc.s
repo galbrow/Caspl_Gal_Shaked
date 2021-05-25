@@ -3,11 +3,68 @@
 	push 5
 	call malloc
 	add esp, 4 
+    mov dword[eax],0
+    mov dword[eax+1],0
 %endmacro
 
-%macro printDebug 1
+%macro printCounter 0
+    mov cl,byte [counter]
+    and ecx,0x0000000f
+    printDebugOct ecx
+%endmacro
+
+%macro printAccumulator 0
+    mov cl,byte [acccumulator]
+    and ecx,0x0000000f
+    printDebugOct ecx
+%endmacro
+
+%macro printNum 0
+    mov ecx,dword[num]
+    printDebugOct ecx
+%endmacro
+
+%macro resetRegs 0
+    mov eax,0
+    mov ebx,0
+    mov ecx,0
+    mov edx,0
+%endmacro
+
+%macro printDebugOct 1
     push %1
-    push debug
+    push debugOct
+    call printf
+    add esp,4
+%endmacro
+
+%macro printStackFull 0
+    push errorOutOfBound
+    call printf
+    add esp,4
+%endmacro
+
+%macro printDebugHex 1
+    push %1
+    push debugHex
+    call printf
+    add esp,4
+%endmacro
+%macro printDebugInt 1
+    push %1
+    push debugInt
+    call printf
+    add esp,4
+%endmacro
+%macro printDebugChar 1
+    push %1
+    push debugChar
+    call printf
+    add esp,4
+%endmacro
+%macro printDebugSrinf 1
+    push %1
+    push debugString
     call printf
     add esp,4
 %endmacro
@@ -38,30 +95,24 @@
 
 %macro setEbxToLastIndexBuffer 0
     mov ebx,buffer
-    .getLastIndex:                       ;check if end of string
-    cmp byte [ebx], 0                
-    jz myCalc.endIndex                  
+    %%getLastIndex:                       ;check if end of string
+    cmp byte [ebx], 0x0                
+    jz %%endIndex                  
     inc ebx
-    jmp myCalc.getLastIndex
-    .endIndex:                           ;end check ecx=buffer length
+    jmp %%getLastIndex
+    %%endIndex:                           ;end check ecx=buffer length
+    dec ebx
     dec ebx
 %endmacro
 
-section .data:
-    errorOutOfBound db 'Error: Operand Stack Overflow',0xA
-    errorOutOfBoundLen equ $-errorOutOfBound
-    errorLackOfArgs db 'Error: Insufficient Number of Arguments on Stack',0xA
-    errorLackOfArgsLen equ $-errorLackOfArgs
-    numOfOperations: dd 0
-    maxIndex: dd 0
-    index: dd 0
-    counter: dd 0
-    acccumulator: dd 0
-    num: dd 0
-
 section .rodata
-        CALC:   DB "calc:" , 10 , 0         ;format string 
-        debug: DB "here %i" ,10,0
+        CALC:   DB "calc:" , 0 , 0         ;format string 
+        debugOct: DB "here %o" ,10, 0
+        debugHex: DB "here %x" ,10, 0
+        debugInt: DB "here %i" ,10, 0
+        debugString: DB "here %s" ,10, 0
+        debugChar: DB "here %c" ,10, 0
+
 
 section .bss
     buffer: resb 80                         ;ask peter for resd
@@ -69,6 +120,18 @@ section .bss
     StackFirst: resd 1
     currentNode: resd 1
     new_node: 	resd 1
+
+section .data
+    errorOutOfBound db 'Error: Operand Stack Overflow',0xA
+    errorOutOfBoundLen equ $-errorOutOfBound
+    errorLackOfArgs db 'Error: Insufficient Number of Arguments on Stack',0xA
+    errorLackOfArgsLen equ $-errorLackOfArgs
+    numOfOperations: dd 0
+    maxIndex: dd 0
+    index: dd 0
+    counter: db 0
+    acccumulator: dd 0
+    num: dd 0
 
 section .text
   align 16
@@ -81,19 +144,27 @@ section .text
   extern stdout
   extern stdin
   extern stderr
+
 main:
-    push ebp
+    ;push ebp
     mov ebp, esp	
-    pushad	
-    mov ecx, dword [ebp + 12]              ;ecx= arg[1]
-    mov ecx, dword [ecx]
-    printDebug ecx
-    mov ecx, dword [ecx]
+    ;pushad
+    resetRegs
+    mov ecx,5
+    cmp dword[ebp + 4],1
+    jz no_stackSizeInserted
+    mov ebx, dword [ebp + 8]              ;ecx= arg[1]
+    add ebx, 4
+    mov edx,[ebx]
+    mov edx,[edx]
+    mov ebx,0x0000FFFF
+    and edx,ebx
+    mov ecx,edx
     sub ecx, 48                         
+    no_stackSizeInserted:
     mov dword[maxIndex] ,ecx             ;add maxIndexValue
     myCalc:
         ;init stack
-        printDebug 94
         shl ecx,2
         push ecx
         call malloc
@@ -102,7 +173,7 @@ main:
 	    mov [stack], dword StackFirst
         ;end init stack
 
-        .loop:
+        loop:
         ;print calc:
         push CALC
         call printf             ;x
@@ -110,20 +181,41 @@ main:
         ;end print calc:
 
         ;get input from user
-        ; push dword [stdin]
-        ; push dword 80
-        ; push dword buffer
-        ; call fgets
-        ; add esp, 12                         ;buffer = fgets
+        push dword [stdin]
+        push dword 80
+        push dword buffer
+        call fgets
+        add esp, 12                         ;buffer = fgets
         ;end get input from user
 
-        ;start q case
+        ;start x case
         cmp byte [buffer],113
         jnz endQCase
         jmp endLabel                         
         endQCase:
-        ;end q case
+        ;end x case
 
+        ; ; ;compare buffer to "p" 
+        ; cmp byte [buffer],112 
+        ; jnz endPrintLabel
+        ; ;checkArgs 1                        ;check if there is enough arguments
+        ; mov ebx, [stack]                    ;arg0
+        ; sub dword [stack],4                 ;index--
+        ; mov edx,ebx                         ;edx*=ebx
+        ; mov ebx,[ebx]                       ;ebx=node
+        ; mov dword[edx],0                    ;edx=0 (delete node)
+        ; ;----------------------------------------
+
+        ; ;---------------convert to string/integer
+        ; and ebx,0x0000FFFF
+        ; push ebx
+        ; ;push [hex_format]
+        ; push dword[stdout]
+        ; call fprintf
+        ; add esp, 12
+        ; ;mov stack[index], ebx               ;stack[index]=ebx
+        ; inc word[index]                           ;index++
+        ; endPrintLabel:
 
         ; ;start + case  
         ; cmp byte [buffer],43
@@ -140,144 +232,160 @@ main:
         ; jmp myCalc.loop
         ;end + case
 
-        ; ;compare buffer to "p" 
-        ; cmp byte [buffer],112 
-        ; checkArgs 1                         ;check if there is enough arguments
-        ; mov ebx, [stack]                    ;arg0
-        ; sub dword stack,1                   ;index--
-        ; ;----------------------------------------
-        ; push ebx
-        ; ;---------------convert to string/integer
-        ; push [stdout]
-        ; call printf
-        ; add esp, 8
-        ; mov stack[index], ebx               ;stack[index]=ebx
-        ; inc index                           ;index++
 
         ; ;
 
 
-        ; ;enter number  
-        ; mov dword[acccumulator],0            ;the accumulator value
-        ; AddNewNode                          ;eax = new node
-
-        ; ;add new node to the stack
-        ; mov ebx, dword [stack]
-	    ; mov dword [ebx], dword eax
-	    ; add ebx, dword 4
-	    ; mov [stack], dword ebx
-        ; mov dword [currentNode],eax
-        ; ;finish add new node to the stack
-
-        ; setEbxToLastIndexBuffer             ;ebx=&buffer[buffer.length]
-
-        ; .startMallocLoop:                   ;37211257
-
-        ; ;read first number of iteration
-        ; mov eax,[ebx]                       ;eax = '7'
-        ; sub eax,48                          ;eax = 7   111
-        ; mov [num],eax                       ;num= 7    111
-        ; dec ebx                             ;ecx --
-        ; ;end read first number
+        ;enter number
+        mov dword [acccumulator],0
+        mov byte [counter],0
+        printCounter
+        printAccumulator
         
-        ; ;case that there is q after the first read we want to finish the read
-        ; cmp byte [ebx],113               
-        ; jnz myCalc.notQafterFirstLetter            ;jump to end of label if there is no q
-        ; mov cl,byte[counter]                       ;cl=counter
-        ; mov eax,dword[num]                         ;eax=num
-        ; shl eax,cl                                 ;shift the number [counter] bits left
-        ; mov edx, [acccumulator]                    ;edx=accumulator
-        ; add edx, eax                               ;ask peter about word/dword
-        ; mov word [acccumulator], 0                 ;reset accumulator
-        ; mov ecx,dword [currentNode]    
-        ; mov [ecx],dl                               ;node.value = 10101111 --> AF
-        ; jmp myCalc.loop                            ;finish iteration of getting number
-        ; .notQafterFirstLetter:
-        ; ;end case
-        ; ;end read the first number of the iteration
+        mov ebx,dword[maxIndex]
+        mov eax,dword[stack]
+        ;mov eax,[eax]
+        mov ecx,dword[StackFirst]
+        sub eax,[ecx]
+        cmp eax,ebx
+        jnz stackIsNotFull
+        printStackFull
+        jmp loop
+        stackIsNotFull:
 
-        ; ;read second number in the iteration
-        ; mov eax,[ebx]                       ;eax = '5'
-        ; sub eax,48                          ;eax = 5   101
-        ; shr eax , 3                         ;eax = 40  101000
-        ; add dword [num], eax                ;num = 57  101111
-        ; dec ebx                             ;ecx --
+        AddNewNode                           ;eax = new node
+        ;add new node to the stack
+        mov ebx, dword [stack]
+	    mov dword [ebx], dword eax
+	    add ebx, dword 4
+	    mov [stack], dword ebx
+        mov dword [currentNode],eax
+        ;finish add new node to the stack
 
-        ; ;case that there is q after the first read we want to finish the read
-        ; cmp byte [ebx],113  
-        ; jnz myCalc.notQafterSecondLetter
-        ; mov ecx,dword[counter]                ;cl=counter
-        ; shl dword [num],cl                        ;ask peter about word/dword
-        ; mov edx,[acccumulator]
-        ; add dword [num], edx                ;ask peter about word/dword
-        ; mov dword[acccumulator], 0               ;reset accumulator
-        ; mov ecx,dword [currentNode]
-        ; mov edx,[num]
-        ; mov [ecx], dl                       ;node.value = 10101111 --> AF
-        ; jmp myCalc.loop                     ;finish iteration of getting number
-        ; .notQafterSecondLetter:
-        ; ;end case
+        setEbxToLastIndexBuffer             ;ebx=&buffer[buffer.length]
+        startMallocLoop:                   ;37211257
 
-        ; cmp dword [counter], 2              ;if (counter == 2)
-        ; jnz myCalc.caseNotTwoBytes          ;case that counter isnt 2 jump to resume normal
-        ; mov dword [counter], 0              ;reset counter
-        ; shl dword [num],2                   ;shift num 2 bytes for adding
-        ; mov edx,dword[acccumulator]
-        ; add edx,dword [num]                 ;add accumulator to num
-        ; mov dword[acccumulator], 0          ;reset accumulator
-        ; mov ecx,dword[currentNode]
-        ; mov [ecx],dl                        ;node.value = 10101111 --> AF     ****************
-        ; jmp myCalc.newNode                  ;finish iteration and start getting new value from user
-        ; .caseNotTwoBytes:                   ;end if
-        ; ;end read second number of the iteration
+        ;read first number of iteration
+        mov eax,0
+        mov eax,[ebx]                       ;eax = '7'
+        sub eax,48                          ;eax = 7   111
+        mov [num],al                       ;num= 7    111
+        dec ebx                             ;ecx --
+        ;end read first number
+        
+        ;case that there is x after the first read we want to finish the read
+        mov edx,ebx
+        inc edx
+        cmp edx,buffer         
+        jnz notQafterFirstLetter                   ;jump to end of label if there is no x
+        mov cl,byte[counter]                       ;cl=counter
+        mov eax,dword[num]                         ;eax=num
+        shl eax,cl                                 ;shift the number [counter] bits left
+        mov edx, [acccumulator]                    ;edx=accumulator
+        and edx,0x000000f
+        add edx, eax                               ;ask peter about word/dword
+        mov word [acccumulator], 0                 ;reset accumulator
+        mov ecx,dword [currentNode]    
+        mov [ecx],dl                               ;node.value = 10101111 --> AF
+        jmp loop                                   ;finish iteration of getting number
+        notQafterFirstLetter:
+        ;end case
+        ;end read the first number of the iteration
 
-        ; mov eax,[ebx]                       ;eax = '2'
-        ; sub eax,48                          ;eax = 2   010
-        ; shl eax, 6                          ;eax = 200 010000000 
-        ; add dword [num], eax                ;num = 257 010101111  ---> 0
-        ; mov ecx,dword[counter]
-        ; shl dword[num],cl                   ;ask peter about word/dword
-        ; mov edx, [acccumulator]
-        ; add edx,dword [num]                 ;ask peter about word/dword
-        ; mov dword[acccumulator], 0          ;reset edx
-        ; mov ecx,dword[currentNode]
-        ; mov byte [ecx],dl                   ;node.value = 10101111 --> AF
-        ; shr edx,8                           ;shift num 8 bytes to get the leftmost bytes
-        ; mov dword [acccumulator],edx
-        ; inc dword [counter]                  ;counter ++
-        ; dec ebx                             ;ecx --
-        ; ;
-        ; cmp byte [buffer],113               ;case that we finished read 3 letters and have q on the next char
-        ; jnz myCalc.notQafterThirdLetter            ;case that there is no q jump to resumer
-        ; mov edx,dword [acccumulator]
-        ; cmp edx,0                           ;check if there is left value in the accumulator edx 
-        ; jnz myCalc.endEDX0                 ;if there is value do not add proccess
-        ; jmp myCalc.loop                     ;else end process and start new loop 
-        ; .endEDX0:                            
-        ; push 5                              ;create new node
-        ; call malloc
-        ; add esp, 4                          ;fix esp
-        ; mov edx, dword[acccumulator]
-        ; mov byte [eax],dl                 ;mov to the node the acccumulator edx value
-        ; mov ebx,dword [currentNode]
-        ; mov dword [ebx + 1],eax             ;ebx.next=new node ask peter if thats the way to do it
-        ; jmp myCalc.loop                     ;start new loop
-        ; .notQafterThirdLetter:
-        ; ;
-        ; .newNode:
-        ; ;create new node
-        ; push 5                              ;create new node
-        ; call malloc
-        ; add esp, 4                          ;fix esp pointer
-        ; ;end create new node in eax         
-        ; ;********* ask peter ****
-        ; mov ecx,dword [currentNode]
-        ; mov dword [ecx + 1],eax             ;ebx.next=new node ask peter if thats the way to do it
-        ; mov dword[currentNode], eax                        ;ebx = eax
-        ; jmp myCalc.startMallocLoop
-        ; .endLoop:
+        ;read second number in the iteration
+        mov eax,0
+        mov eax,[ebx]                       ;eax = '5'
+        sub eax,48                          ;eax = 5   101
+        shl eax,3                           ;eax = 40  101000 
+        add [num], al                ;num = 57  101111
+        dec ebx                             ;ecx --
+
+        ;case that there is q after the second read we want to finish the read
+        mov edx,ebx
+        inc edx
+        cmp edx,buffer  
+        jnz notQafterSecondLetter
+        mov cl,byte[counter]                ;cl=counter
+        shl dword [num],cl                    ;ask peter about word/dword
+        mov edx,[acccumulator]
+        and edx,0x000000f
+        add dword [num], edx                  ;ask peter about word/dword
+        mov dword[acccumulator], 0            ;reset accumulator
+        mov ecx,dword [currentNode]
+        mov edx,[num]
+        mov [ecx], dl                       ;node.value = 10101111 --> AF
+        jmp loop                     ;finish iteration of getting number
+        notQafterSecondLetter:
+        ;end case
+
+        cmp byte [counter], 2              ;if (counter == 2)
+        jnz caseNotTwoBytes          ;case that counter isnt 2 jump to resume normal
+        mov byte [counter], 0              ;reset counter
+        shl dword [num],2                   ;shift num 2 bytes for adding
+        mov edx,dword[acccumulator]
+        and edx,0x0000000f
+        add edx,dword [num]                 ;add accumulator to num
+        mov dword[acccumulator], 0          ;reset accumulator
+        mov ecx,dword[currentNode]
+        mov [ecx],dl                        ;node.value = 10101111 --> AF     ****************
+        jmp newNode                  ;finish iteration and start getting new value from user
+        caseNotTwoBytes:                   ;end if
+        ;end read second number of the iteration
+
+        mov eax,0
+        mov eax,[ebx]                       ;eax = '2'
+        sub eax,48                          ;eax = 2   010
+        shl eax, 6                          ;eax = 200 010000000 
+        add [num], al                       ;num = 257 010101111  ---> 0
+        mov cl,byte[counter]
+        ;mov ebx,dword[num]
+        ;and ebx,0x000000ff
+        and ecx,0x000000f
+        mov eax,dword[num]
+        shl eax,cl                   ;ask peter about word/dword
+        mov edx, [acccumulator]
+        and edx,0x0000000f
+        and ecx,0x0000000f
+        add edx,dword [num]                 ;ask peter about word/dword
+        and edx,0x000000ff
+        mov dword[acccumulator], 0          ;reset edx
+        mov ecx,dword[currentNode]
+        mov byte [ecx],dl                   ;node.value = 10101111 --> AF
+        shr edx,8                           ;shift num 8 bytes to get the leftmost bytes
+        mov dword [acccumulator],edx
+        inc byte [counter]                  ;counter ++
+        mov dl,[counter]
+        and edx,0x0000000f
+
+        dec ebx                             ;ecx --
+
+        ;case that we finished read 3 letters and have x on the next char
+        mov edx,ebx
+        inc edx
+        cmp edx,buffer               
+        jnz notQafterThirdLetter            ;case that there is no x jump to resumer
+        mov edx,dword [acccumulator]
+        cmp edx,0                           ;check if there is left value in the accumulator edx 
+        jnz endEDX0                 ;if there is value do not add proccess
+        jmp loop                     ;else end process and start new loop 
+        endEDX0:                            
+        AddNewNode                          
+        mov edx, dword[acccumulator]
+        mov byte [eax],dl                 ;mov to the node the acccumulator edx value
+        mov ebx,dword [currentNode]
+        mov dword [ebx + 1],eax             ;ebx.next=new node ask peter if thats the way to do it
+        jmp loop                     ;start new loop
+        notQafterThirdLetter:
+        newNode:
+        AddNewNode
+        mov ecx,dword [currentNode]
+        mov dword [ecx + 1],eax             ;ebx.next=new node ask peter if thats the way to do it
+        mov dword[currentNode], eax                        ;ebx = eax
+        mov edx,dword[stack]
+
+        jmp startMallocLoop
+        endLoop:
 endLabel:
-popad
 mov esp,ebp
 ret
     
