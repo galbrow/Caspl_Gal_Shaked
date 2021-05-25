@@ -7,21 +7,27 @@
     mov dword[eax+1],0
 %endmacro
 
+%macro resetAddNumberVals 0
+    mov dword[num],0
+    mov dword[acccumulator],0
+    mov byte[counter],0
+%endmacro
+
 %macro printCounter 0
-    mov cl,byte [counter]
-    and ecx,0x0000000f
-    printDebugOct ecx
+    mov al,byte [counter]
+    and eax,0x0000000f
+    printDebugOct eax
 %endmacro
 
 %macro printAccumulator 0
-    mov cl,byte [acccumulator]
-    and ecx,0x0000000f
-    printDebugOct ecx
+    mov eax,dword [acccumulator]
+    and eax,0x0000000f
+    printDebugOct eax
 %endmacro
 
 %macro printNum 0
-    mov ecx,dword[num]
-    printDebugOct ecx
+    mov eax,dword[num]
+    printDebugOct eax
 %endmacro
 
 %macro resetRegs 0
@@ -35,7 +41,7 @@
     push %1
     push debugOct
     call printf
-    add esp,4
+    add esp,8
 %endmacro
 
 %macro printStackFull 0
@@ -48,25 +54,25 @@
     push %1
     push debugHex
     call printf
-    add esp,4
+    add esp,8
 %endmacro
 %macro printDebugInt 1
     push %1
     push debugInt
     call printf
-    add esp,4
+    add esp,8
 %endmacro
 %macro printDebugChar 1
     push %1
     push debugChar
     call printf
-    add esp,4
+    add esp,8
 %endmacro
 %macro printDebugSrinf 1
     push %1
     push debugString
     call printf
-    add esp,4
+    add esp,8
 %endmacro
 
 %macro checkArgs 1
@@ -237,11 +243,7 @@ main:
 
 
         ;enter number
-        mov dword [acccumulator],0
-        mov byte [counter],0
-        printCounter
-        printAccumulator
-        
+        resetAddNumberVals
         mov ebx,dword[maxIndex]
         mov eax,dword[stack]
         ;mov eax,[eax]
@@ -269,24 +271,28 @@ main:
         mov eax,0
         mov eax,[ebx]                       ;eax = '7'
         sub eax,48                          ;eax = 7   111
-        mov [num],al                       ;num= 7    111
+        mov [num],al                        ;num= 7    111
         dec ebx                             ;ecx --
         ;end read first number
-        
-        ;case that there is x after the first read we want to finish the read
+
+
+        ;case that we are in the end of buffer after read the first number
         mov edx,ebx
         inc edx
         cmp edx,buffer         
         jnz notQafterFirstLetter                   ;jump to end of label if there is no x
         mov cl,byte[counter]                       ;cl=counter
+        and ecx,0x0000000f
         mov eax,dword[num]                         ;eax=num
         shl eax,cl                                 ;shift the number [counter] bits left
         mov edx, [acccumulator]                    ;edx=accumulator
-        and edx,0x000000f
+        and edx,0x00000ff
         add edx, eax                               ;ask peter about word/dword
         mov word [acccumulator], 0                 ;reset accumulator
         mov ecx,dword [currentNode]    
         mov [ecx],dl                               ;node.value = 10101111 --> AF
+        printDebugHex edx
+        resetAddNumberVals
         jmp loop                                   ;finish iteration of getting number
         notQafterFirstLetter:
         ;end case
@@ -297,92 +303,106 @@ main:
         mov eax,[ebx]                       ;eax = '5'
         sub eax,48                          ;eax = 5   101
         shl eax,3                           ;eax = 40  101000 
-        add [num], al                ;num = 57  101111
+        add [num], al                       ;num = 57  101111
         dec ebx                             ;ecx --
-
-        ;case that there is q after the second read we want to finish the read
+        ;case that we are in the end of buffer after read the second number
         mov edx,ebx
         inc edx
         cmp edx,buffer  
         jnz notQafterSecondLetter
-        mov cl,byte[counter]                ;cl=counter
-        shl dword [num],cl                    ;ask peter about word/dword
+        mov cl,byte[counter]                  ;cl=counter
+        and ecx,0x0000000f
+        mov eax, dword[num]
+        shl eax,cl                    ;ask peter about word/dword
+        mov dword[num],eax
         mov edx,[acccumulator]
-        and edx,0x000000f
+        and edx,0x00000ff
         add dword [num], edx                  ;ask peter about word/dword
         mov dword[acccumulator], 0            ;reset accumulator
         mov ecx,dword [currentNode]
-        mov edx,[num]
-        mov [ecx], dl                       ;node.value = 10101111 --> AF
-        jmp loop                     ;finish iteration of getting number
+        mov edx,dword[num]
+        mov [ecx], dl                         ;node.value = 10101111 --> AF
+        printDebugHex edx
+        resetAddNumberVals
+        jmp loop                              ;finish iteration of getting number
         notQafterSecondLetter:
         ;end case
 
+        ;case that we have 2 bits in the accumulator so we finish read after 2 numbers iteration
         cmp byte [counter], 2              ;if (counter == 2)
-        jnz caseNotTwoBytes          ;case that counter isnt 2 jump to resume normal
+        jnz caseNotTwoBytes                ;case that counter isnt 2 jump to resume normal
         mov byte [counter], 0              ;reset counter
-        shl dword [num],2                   ;shift num 2 bytes for adding
+        shl dword [num],2                  ;shift num 2 bytes for adding
         mov edx,dword[acccumulator]
-        and edx,0x0000000f
+        and edx,0x000000ff
         add edx,dword [num]                 ;add accumulator to num
         mov dword[acccumulator], 0          ;reset accumulator
         mov ecx,dword[currentNode]
         mov [ecx],dl                        ;node.value = 10101111 --> AF     ****************
-        jmp newNode                  ;finish iteration and start getting new value from user
-        caseNotTwoBytes:                   ;end if
+        jmp newNode                         ;finish iteration and start getting new value from user
+        caseNotTwoBytes:                    ;end if
         ;end read second number of the iteration
 
-        mov eax,0
-        mov eax,[ebx]                       ;eax = '2'
-        sub eax,48                          ;eax = 2   010
-        shl eax, 6                          ;eax = 200 010000000 
-        add [num], al                       ;num = 257 010101111  ---> 0
+        ;read third number
+        mov edx,0
+        mov edx,[ebx]                       ;eax = '2'
+        sub edx,48                          ;eax = 2   010
+        shl edx, 6                          ;eax = 200 010000000 
+        add [num], dl                       ;num = 257 010101111  ---> 0
+        ;end read
         mov cl,byte[counter]
-        ;mov ebx,dword[num]
-        ;and ebx,0x000000ff
         and ecx,0x000000f
-        mov eax,dword[num]
-        shl eax,cl                   ;ask peter about word/dword
-        mov edx, [acccumulator]
-        and edx,0x0000000f
-        and ecx,0x0000000f
-        add edx,dword [num]                 ;ask peter about word/dword
-        and edx,0x000000ff
+        mov edx,dword[num]
+        shl edx,cl     
+        ;work              
+        mov eax, [acccumulator]
+        and eax,0x000000ff
+        add edx,eax
+        mov ecx,0
+        add cl,dl
+        mov dword[num],ecx
         mov dword[acccumulator], 0          ;reset edx
         mov ecx,dword[currentNode]
         mov byte [ecx],dl                   ;node.value = 10101111 --> AF
         shr edx,8                           ;shift num 8 bytes to get the leftmost bytes
-        mov dword [acccumulator],edx
-        inc byte [counter]                  ;counter ++
-        mov dl,[counter]
         and edx,0x0000000f
+        mov dword [acccumulator],edx
+        ;printDebugHex eax
+        inc byte [counter]                  ;counter ++
+        mov al,[counter]
+        and eax,0x0000000f
+        dec ebx                             ;ebx --
 
-        dec ebx                             ;ecx --
-
-        ;case that we finished read 3 letters and have x on the next char
+        ;case that we finished read 3 letters and have q on the next char
         mov edx,ebx
         inc edx
         cmp edx,buffer               
         jnz notQafterThirdLetter            ;case that there is no x jump to resumer
         mov edx,dword [acccumulator]
         cmp edx,0                           ;check if there is left value in the accumulator edx 
-        jnz endEDX0                 ;if there is value do not add proccess
-        jmp loop                     ;else end process and start new loop 
+        jnz endEDX0                         ;if there is value do not add proccess
+        jmp loop                            ;else end process and start new loop 
         endEDX0:                            
         AddNewNode                          
         mov edx, dword[acccumulator]
-        mov byte [eax],dl                 ;mov to the node the acccumulator edx value
+        mov byte [eax],dl                  ;mov to the node the acccumulator edx value
         mov ebx,dword [currentNode]
-        mov dword [ebx + 1],eax             ;ebx.next=new node ask peter if thats the way to do it
-        jmp loop                     ;start new loop
+        mov dword [ebx + 1],eax            ;ebx.next=new node ask peter if thats the way to do it
+        jmp loop                           ;start new loop
         notQafterThirdLetter:
+        ;end case
+
+        ;insert new node to list
         newNode:
         AddNewNode
         mov ecx,dword [currentNode]
         mov dword [ecx + 1],eax             ;ebx.next=new node ask peter if thats the way to do it
-        mov dword[currentNode], eax                        ;ebx = eax
+        mov dword[currentNode], eax         ;ebx = eax
         mov edx,dword[stack]
+        ;end insert new node
 
+        printDebugHex dword[num]
+        ;repeat
         jmp startMallocLoop
         endLoop:
 endLabel:
