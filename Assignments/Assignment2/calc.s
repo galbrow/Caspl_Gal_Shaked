@@ -2,8 +2,47 @@
 %macro AddNewNode 0
     push 1
 	push 5
-	call malloc
+	call calloc
 	add esp, 8
+%endmacro
+
+%macro printBN 0
+    pushad
+    push bn
+    call printf
+    add esp,4
+    popad
+%endmacro
+
+%macro printOct 1
+    pushad
+    push %1
+    push OctFormat
+    call printf
+    add esp,8
+    popad
+%endmacro
+
+;1=register , 2=numOfIterations
+%macro printChar 2
+    mov ebx,%1          ;edx
+    mov ecx,%2          ;8
+    %%begin:
+    cmp ecx,0
+    jz %%endPrint
+    mov edx,0
+    mov edx,ebx
+    shr edx,29
+    pushad
+    push edx
+    push CharFormat
+    call printf
+    popad
+    add esp,8
+    dec ecx
+    shl ebx,3
+    jmp %%begin
+    %%endPrint:
 %endmacro
 
 ;pops node to ecx
@@ -56,48 +95,75 @@
 %endmacro
 
 %macro printDebugOct 1
+    pushad
     push %1
     push debugOct
     call printf
     add esp,8
+    popad
 %endmacro
 
 %macro printStackFull 0
+    pushad
     push errorOutOfBound
     call printf
     add esp,4
+    popad
 %endmacro
 
 %macro printStackEmpty 0
+    pushad
     push errorLackOfArgs
     call printf
     add esp,4
+    popad
 %endmacro
 
 %macro printDebugHex 1
+    pushad
     push %1
     push debugHex
     call printf
     add esp,8
+    popad
 %endmacro
 
 %macro printDebugInt 1
+    pushad
     push %1
     push debugInt
     call printf
     add esp,8
+    popad
 %endmacro
+
 %macro printDebugChar 1
+    pushad
     push %1
     push debugChar
     call printf
     add esp,8
+    popad
 %endmacro
+
 %macro printDebugSrinf 1
+    pushad
     push %1
     push debugString
     call printf
     add esp,8
+    popad
+%endmacro
+
+%macro addNewNodeToStack 0
+        pushad
+        mov edx,0
+        mov dl,[index]
+        mov ebx, dword [stack]
+        mov [edx*4+ebx],eax
+        mov dword [currentNode],eax
+        inc byte[index]
+        popad
 %endmacro
 
 %macro setEbxToLastIndexBuffer 0
@@ -119,6 +185,9 @@ section .rodata
         debugInt: DB "here %i" ,10, 0
         debugString: DB "here %s" ,10, 0
         debugChar: DB "here %c" ,10, 0
+        CharFormat: DB "%c" ,0, 0
+        OctFormat: DB "%o" ,0, 0
+        bn: DB "" ,10, 0
 
 
 section .bss
@@ -145,7 +214,8 @@ section .text
   global main
   extern printf
   extern fprintf 
-  extern malloc 
+  extern malloc
+  extern calloc 
   extern free 
   extern fgets 
   extern stdout
@@ -177,7 +247,6 @@ main:
         push ecx
         call malloc
         add esp, 4
-        ;mov [StackFirst], eax
 	    mov [stack], eax
         ;end init stack
 
@@ -203,23 +272,80 @@ main:
         endQCase:
         ;end x case
 
-        ; ;compare buffer to "p" 
+        ;need to fix cases that the number has more than 8 digits
+        ;compare buffer to "p" 
         cmp byte [buffer],112 
         jnz endPrintLabel
         resetRegs
         popNodeFromStack
+        startPrint:
+        mov ebx,0
+        mov edx,0
+        mov eax,0
+        ;read first 
+
         mov edx,[ecx]
+        cmp ecx,0
+        jz printNewLine 
         and edx,0x000000ff
-        printDebugHex edx
-        mov edx,[ecx+1]
-        and edx,0x000000ff
-        printDebugHex edx
+        add ebx,edx
 
-        ;----------------------------------------
+        inc ecx
+        mov edx,[ecx]
+        mov ecx,[ecx]
+        cmp ecx,0
+        jz printNewLine 
+        mov edx,[edx]
+        mov eax,edx
+        and eax,0x000000ff
+        shl eax,8
+        add ebx,eax
 
-        ;---------------convert to string/integer
+        inc ecx
+        mov edx,[ecx]
+        mov ecx,[ecx]
+        cmp ecx,0
+        jz printNewLine 
+        mov edx,[edx]
+        mov eax,edx
+        and eax,0x000000ff
+        shl eax,16
+        add ebx,eax
+        printOct ebx
+        
+        inc ecx
+        mov ecx,[ecx]
+        cmp ecx,0
+        jz printNewLineWithoutOct
+
+        jmp startPrint
+        printNewLine:
+        printOct ebx
+        printNewLineWithoutOct:
+        printBN
         jmp loop
         endPrintLabel:
+
+        ;start n case
+        cmp byte [buffer],110
+        jnz endNLabel
+        mov edx,0
+        popNodeFromStack
+        beginNloop:
+        mov ecx,[ecx+1]
+        cmp ecx,0
+        jz lastNode
+        inc edx 
+        jmp beginNloop
+        lastNode:
+        inc edx
+        AddNewNode
+        and edx,0x000000ff
+        printDebugOct edx
+        addNewNodeToStack
+        mov [eax],edx
+        jmp loop
+        endNLabel:
 
         ; ;start + case  
         ; cmp byte [buffer],43
@@ -237,8 +363,6 @@ main:
         ; ;end + case
 
 
-        ;
-
 
         ;enter number
         resetAddNumberVals
@@ -252,12 +376,13 @@ main:
 
         AddNewNode                           ;eax = new node
         ;add new node to the stack
-        mov edx,0
-        mov dl,[index]
-        mov ebx, dword [stack]
-        mov [edx*4+ebx],eax
-        mov dword [currentNode],eax
-        inc byte[index]
+        ; mov edx,0
+        ; mov dl,[index]
+        ; mov ebx, dword [stack]
+        ; mov [edx*4+ebx],eax
+        ; mov dword [currentNode],eax
+        ; inc byte[index]
+        addNewNodeToStack
         ;finish add new node to the stack
         resetRegs
         setEbxToLastIndexBuffer             ;ebx=&buffer[buffer.length]
@@ -401,9 +526,10 @@ main:
         newNode:
         AddNewNode
         mov ecx,dword [currentNode]
-        mov dword [ecx+1],eax                 ;ebx.next=new node ask peter if thats the way to do it
+        mov dword [ecx+1],eax               ;ebx.next=new node ask peter if thats the way to do it
         mov dword[currentNode], eax         ;ebx = eax
         ;end insert new node
+        
         printDebugHex dword[num]
         mov dword[num],0
         ;repeat
@@ -412,4 +538,19 @@ main:
 endLabel:
 mov esp,ebp
 ret
+
+
+; checkIfLastNode:
+;     mov eax,0
+;     push ebp
+;     mov ebp,esp
+;     mob ecx,[ebp+8]
+;     mov edx,[ecx+1]
+;     cmp edx,0
+;     jz endLastNodeFunc
+;     mov eax,1
+;     endLastNodeFunc:
+;     mov esp,ebp
+;     pop ebp
+;     ret
     
