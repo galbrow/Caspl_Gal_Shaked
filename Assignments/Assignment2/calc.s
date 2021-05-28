@@ -1,9 +1,25 @@
 ;macro that changes eax value and new_node
 %macro AddNewNode 0
+    pushad
     push 1
 	push 5
 	call calloc
 	add esp, 8
+    mov dword[new_node],eax
+    popad
+    mov eax,dword[new_node]
+%endmacro
+
+%macro clearBuffer 0
+    pushad
+    mov eax,buffer
+    mov ebx,79
+    cmp ebx, -1
+    jz %%endmacro
+    mov byte[ebx+eax],0
+    dec ebx
+    %%endmacro:
+    popad
 %endmacro
 
 %macro printBN 0
@@ -23,30 +39,10 @@
     popad
 %endmacro
 
-;1=register , 2=numOfIterations
-%macro printChar 2
-    mov ebx,%1          ;edx
-    mov ecx,%2          ;8
-    %%begin:
-    cmp ecx,0
-    jz %%endPrint
-    mov edx,0
-    mov edx,ebx
-    shr edx,29
-    pushad
-    push edx
-    push CharFormat
-    call printf
-    popad
-    add esp,8
-    dec ecx
-    shl ebx,3
-    jmp %%begin
-    %%endPrint:
-%endmacro
-
 ;pops node to ecx
 %macro popNodeFromStack 0
+    pushad
+    resetRegs
     mov edx, 0
     mov dl, [index]
     cmp edx, 0
@@ -60,8 +56,11 @@
     mov ebx, [stack]
     mov ecx, [ebx + edx * 4]
     mov dword [ebx + edx * 4] , 0
-    jmp %%finish
-    %%finish:
+    mov dword[new_node],0
+    mov dword[new_node],ecx
+    popad
+    mov ecx,0
+    mov ecx,dword[new_node]
 %endmacro
 
 %macro resetAddNumberVals 0
@@ -156,14 +155,16 @@
 %endmacro
 
 %macro addNewNodeToStack 0
-        pushad
-        mov edx,0
-        mov dl,[index]
-        mov ebx, dword [stack]
-        mov [edx*4+ebx],eax
-        mov dword [currentNode],eax
-        inc byte[index]
-        popad
+    pushad
+    mov ebx,0
+    mov ecx,0
+    mov edx,0
+    mov dl,[index]
+    mov ebx, dword [stack]
+    mov [edx*4+ebx],eax
+    mov dword [currentNode],eax
+    inc byte[index]
+    popad
 %endmacro
 
 %macro setEbxToLastIndexBuffer 0
@@ -179,35 +180,35 @@
 %endmacro
 
 section .rodata
-        CALC:   DB "calc:" , 0 , 0         ;format string 
-        debugOct: DB "here %o" ,10, 0
-        debugHex: DB "here %x" ,10, 0
-        debugInt: DB "here %i" ,10, 0
-        debugString: DB "here %s" ,10, 0
-        debugChar: DB "here %c" ,10, 0
-        CharFormat: DB "%c" ,0, 0
-        OctFormat: DB "%o" ,0, 0
-        bn: DB "" ,10, 0
-
+    CALC:   DB "calc:" , 0 , 0         ;format string 
+    debugOct: DB "here %o" ,10, 0
+    debugHex: DB "here %x" ,10, 0
+    debugInt: DB "here %i" ,10, 0
+    debugString: DB "here %s" ,10, 0
+    debugChar: DB "here %c" ,10, 0
+    CharFormat: DB "%c" ,0, 0
+    OctFormat: DB "%o" ,0, 0
+    bn: DB "" ,10, 0
+    errorOutOfBound: db "Error: Operand Stack Overflow",10,0
+    errorLackOfArgs: db "Error: Insufficient Number of Arguments on Stack",10,0
 
 section .bss
-    buffer: resb 80                         ;ask peter for resd
+    buffer: resb 80                         
     stack: resd 1
     StackFirst: resd 1
     currentNode: resd 1
     new_node: 	resd 1
+    first_node: resd 1
+    second_node: resd 1
 
 section .data
-    errorOutOfBound db 'Error: Operand Stack Overflow',0xA
-    errorOutOfBoundLen equ $-errorOutOfBound
-    errorLackOfArgs db 'Error: Insufficient Number of Arguments on Stack',0xA
-    errorLackOfArgsLen equ $-errorLackOfArgs
     numOfOperations: dd 0
     maxIndex: db 0
     index: db 0
     counter: db 0
     acccumulator: dd 0
     num: dd 0
+    printCount: dd 0
 
 section .text
   align 16
@@ -223,14 +224,13 @@ section .text
   extern stderr
 
 main:
-    ;push ebp
+    push ebp
     mov ebp, esp	
-    ;pushad
     resetRegs
     mov ecx,5
-    cmp dword[ebp + 4],1
+    cmp dword[ebp + 8],1
     jz no_stackSizeInserted
-    mov ebx, dword [ebp + 8]              ;ecx= arg[1]
+    mov ebx, dword [ebp + 12]              ;ecx= arg[1]
     add ebx, 4
     mov edx,[ebx]
     mov edx,[edx]
@@ -256,7 +256,8 @@ main:
         call printf
         add esp, 4                          ;print calc:
         ;end print calc:
-
+        
+        clearBuffer
         ;get input from user
         push dword [stdin]
         push dword 80
@@ -276,23 +277,24 @@ main:
         ;compare buffer to "p" 
         cmp byte [buffer],112 
         jnz endPrintLabel
+        mov dword[printCount],0
+        clearBuffer
         resetRegs
         popNodeFromStack
+        inc dword[numOfOperations]
         startPrint:
         mov ebx,0
         mov edx,0
         mov eax,0
-        ;read first 
 
-        mov edx,[ecx]
+        ;read first             edx=accumulator, ecx=currentNode
         cmp ecx,0
-        jz printNewLine 
+        jz printNewLine          ;case of last index
+        mov edx,[ecx]            ;ecx=poped node
         and edx,0x000000ff
         add ebx,edx
-
-        inc ecx
-        mov edx,[ecx]
-        mov ecx,[ecx]
+        mov edx,[ecx+1]
+        mov ecx,[ecx+1]
         cmp ecx,0
         jz printNewLine 
         mov edx,[edx]
@@ -301,9 +303,8 @@ main:
         shl eax,8
         add ebx,eax
 
-        inc ecx
-        mov edx,[ecx]
-        mov ecx,[ecx]
+        mov edx,[ecx+1]
+        mov ecx,[ecx+1]
         cmp ecx,0
         jz printNewLine 
         mov edx,[edx]
@@ -311,17 +312,50 @@ main:
         and eax,0x000000ff
         shl eax,16
         add ebx,eax
-        printOct ebx
-        
-        inc ecx
-        mov ecx,[ecx]
+
+        ;printOct ebx
+
+        mov ecx,[ecx+1]
         cmp ecx,0
-        jz printNewLineWithoutOct
+        jz printNewLine
+
+        pushad
+        inc dword[printCount]
+        mov ecx,buffer
+        add ecx,79
+        mov edx,0
+        mov edx,dword[printCount]
+        sub ecx,edx
+        sub ecx,edx
+        sub ecx,edx
+        mov dword[ecx],ebx
+        ;printDebugOct ebx
+        popad
 
         jmp startPrint
         printNewLine:
         printOct ebx
+        mov edx,0
+        mov edx,dword[printCount]
+        cmp edx,0
+        jz endPrint
         printNewLineWithoutOct:
+        mov ebx,buffer
+        add ebx,79
+        cmp edx,0
+        jz endPrint
+        mov ecx,0
+        mov ecx,edx
+        sub ebx,ecx
+        sub ebx,ecx
+        sub ebx,ecx
+        mov eax,dword[ebx]
+        shl eax,8
+        shr eax,8
+        printOct eax
+        dec edx
+        jmp printNewLineWithoutOct
+        endPrint:
         printBN
         jmp loop
         endPrintLabel:
@@ -329,8 +363,9 @@ main:
         ;start n case
         cmp byte [buffer],110
         jnz endNLabel
-        mov edx,0
+        resetRegs
         popNodeFromStack
+        inc dword[numOfOperations]
         beginNloop:
         mov ecx,[ecx+1]
         cmp ecx,0
@@ -339,34 +374,133 @@ main:
         jmp beginNloop
         lastNode:
         inc edx
-        AddNewNode
         and edx,0x000000ff
-        printDebugOct edx
+        ;printDebugOct edx
+        AddNewNode
         addNewNodeToStack
-        mov [eax],edx
+        mov [eax],dl
+        mov edx,0
         jmp loop
         endNLabel:
 
-        ; ;start + case  
-        ; cmp byte [buffer],43
-        ; checkArgs 2                         ;check if there is enough arguments
-        ; mov ebx, [stack]                    ;arg0
-        ; sub dword stack,4                   ;index--
-        ; mov ecx, [stack]                    ;arg1
-        ; sub dword stack,4                   ;index--
-        ; ;------------------------------------------------------------------do add with the object linked list
-        ; add ebx, ecx                        ;ebx=ebx+ecx
-        ; ;------------------------------------------------------------------
-        ; mov [stack], ebx                    ;stack[index]=ebx
-        ; add dword stack, 4                  ;index++
-        ; jmp myCalc.loop
-        ; ;end + case
+        ;start & case
+        cmp byte [buffer],38
+        jnz endAndCase
+        cmp byte[index],2
+        jnb caseOf2Ops
+        printStackEmpty
+        jmp loop
+        caseOf2Ops:
+        inc dword[numOfOperations]
+        popNodeFromStack
+        mov eax,0
+        mov edx,dword[stack]
+        mov al,byte [index]
+        dec al
+        mov edx,[edx+4*eax]
+        andLoop:
+        mov al,byte[ecx]
+        and byte[edx],al
+        inc edx
+        inc ecx
+        cmp dword[edx],0
+        jz loop
+        cmp dword[ecx],0
+        jnz caseNotEmpty
+        mov dword[edx],0
+        jmp loop
+        caseNotEmpty:
+        jmp andLoop
+        endAndCase:
 
+
+        ;start + case  
+        cmp byte [buffer],43   ;edx=overflow
+        jnz endPlus
+        resetRegs
+        cmp byte[index],2
+        jnb caseOf2OpsPlus
+        printStackEmpty
+        jmp loop
+        caseOf2OpsPlus:
+        ;-------------------do add with the object linked list
+        popNodeFromStack
+        mov dword[first_node],ecx
+        popNodeFromStack
+        mov dword[second_node],ecx
+        AddNewNode
+        addNewNodeToStack
+        mov edx,0
+        startPlusLoop:
+        mov ebx,dword[first_node]
+        mov ecx,dword[second_node]
+        mov ebx,dword[ebx]
+        mov ecx,dword[ecx]
+        and ebx,0x000000ff
+        and ecx,0x000000ff
+        add edx,ebx
+        add edx,ecx
+        mov ebx,dword[first_node]
+        mov ecx,dword[second_node]
+        mov ecx,dword[ecx+1]
+        mov byte[eax],dl
+        shr edx,8
+        mov ebx,dword[first_node]
+        mov ecx,dword[second_node]
+        mov ebx,dword[ebx+1]
+        mov ecx,dword[ecx+1]
+        mov dword[first_node],ebx
+        mov dword[second_node],ecx
+        cmp ecx,0
+        jz addRest
+        cmp ebx,0
+        jnz continueCase
+        mov ebx,ecx
+        mov ecx,0
+        jmp addRest
+        continueCase:
+        mov ebx,eax
+        AddNewNode
+        mov dword[ebx+1],eax
+        jmp startPlusLoop
+        ;------------------------------------------------------------------
+        addRest: ;ebx have more values
+        cmp ebx,0
+        jnz only1Null
+        cmp dl,0
+        jz loop
+        mov ecx,eax
+        AddNewNode
+        mov byte[eax],dl
+        mov [ecx+1],eax
+        mov edx,0
+        jmp loop
+        only1Null:
+        cmp dl,0
+        jnz cont
+        mov ebx,[ebx+1]
+        mov dword[eax+1],ebx
+        jmp loop
+        cont:
+        ;printDebugOct edx
+        mov ecx,0
+        mov cl,byte[ebx]
+        add edx,ecx
+        mov byte[eax],dl
+        shr edx,8
+        mov ecx,eax
+        AddNewNode
+        mov dword[ecx+1],eax
+        jmp addRest
+        endPlus:
+        ;end + case
+        
 
 
         ;enter number
         resetAddNumberVals
         resetRegs
+        clearBuffer
         mov al,[index]
         cmp [maxIndex],al
         jnz stackIsNotFull
@@ -375,13 +509,6 @@ main:
         stackIsNotFull:
 
         AddNewNode                           ;eax = new node
-        ;add new node to the stack
-        ; mov edx,0
-        ; mov dl,[index]
-        ; mov ebx, dword [stack]
-        ; mov [edx*4+ebx],eax
-        ; mov dword [currentNode],eax
-        ; inc byte[index]
         addNewNodeToStack
         ;finish add new node to the stack
         resetRegs
@@ -409,7 +536,6 @@ main:
         mov edx, [acccumulator]                    ;edx=accumulator
         and edx,0x000000ff
         add edx, eax                               ;ask peter about word/dword
-        ;mov byte [acccumulator], 0                 ;reset accumulator
         mov ecx,dword [currentNode]    
         mov [ecx],dl                               ;node.value = 10101111 --> AF
         mov ecx,[ecx]
@@ -441,7 +567,7 @@ main:
         mov edx,[acccumulator]
         and edx,0x000000ff
         add dword [num], edx                  ;ask peter about word/dword
-        ;mov dword[acccumulator], 0            ;reset accumulator
+        mov dword[acccumulator], 0            ;reset accumulator
         mov ecx,dword [currentNode]
         mov edx,dword[num]
         mov [ecx], dl                         ;node.value = 10101111 --> AF
@@ -536,21 +662,66 @@ main:
         jmp startMallocLoop
         endLoop:
 endLabel:
+mov eax,0
 mov esp,ebp
+mov eax,dword[numOfOperations]
 ret
 
+        ; ;need to fix cases that the number has more than 8 digits
+        ; ;compare buffer to "p" 
+        ; cmp byte [buffer],112 
+        ; jnz endPrintLabel
+        ; resetRegs
+        ; popNodeFromStack
+        ; inc dword[numOfOperations]
+        ; startPrint:
+        ; mov ebx,0
+        ; mov edx,0
+        ; mov eax,0
+        ; ;read first 
 
-; checkIfLastNode:
-;     mov eax,0
-;     push ebp
-;     mov ebp,esp
-;     mob ecx,[ebp+8]
-;     mov edx,[ecx+1]
-;     cmp edx,0
-;     jz endLastNodeFunc
-;     mov eax,1
-;     endLastNodeFunc:
-;     mov esp,ebp
-;     pop ebp
-;     ret
+        ; mov edx,[ecx]
+        ; cmp ecx,0
+        ; jz printNewLine 
+        ; and edx,0x000000ff
+        ; add ebx,edx
+
+        ; inc ecx
+        ; mov edx,[ecx]
+        ; mov ecx,[ecx]
+        ; cmp ecx,0
+        ; jz printNewLine 
+        ; mov edx,[edx]
+        ; mov eax,edx
+        ; and eax,0x000000ff
+        ; shl eax,8
+        ; add ebx,eax
+
+        ; inc ecx
+        ; mov edx,[ecx]
+        ; mov ecx,[ecx]
+        ; cmp ecx,0
+        ; jz printNewLine 
+        ; mov edx,[edx]
+        ; mov eax,edx
+        ; and eax,0x000000ff
+        ; shl eax,16
+        ; add ebx,eax
+        ; printOct ebx
+
+        ; inc ecx
+        ; mov ecx,[ecx]
+        ; cmp ecx,0
+        ; jz printNewLineWithoutOct
+
+        ; jmp startPrint
+        ; printNewLine:
+        ; printOct ebx
+        ; printNewLineWithoutOct:
+        ; printBN
+        ; jmp loop
+        ; endPrintLabel:
+
+
+
     
